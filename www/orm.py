@@ -7,7 +7,7 @@ import asyncio, logging
 # aiomysql是Mysql的python异步驱动程序，操作数据库要用到
 import aiomysql
 
-# 这个函数的作用是输出信息，让你知道这个时间点程序在做什么
+# 打印SQL查询语句
 def log(sql, args=()):
     logging.info('SQL: %s' % sql)
 

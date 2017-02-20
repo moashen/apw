@@ -73,8 +73,8 @@ def text2html(text):
 
 # 这个函数在day10中被定义
 # 解密cookie
-@asyncio.coroutine
-def cookie2user(cookie_str):
+
+async def cookie2user(cookie_str):
     '''
     Parse cookie and load user if cookie is valid.如果cookie是有效的，分析cookie，加载用户信息
     '''
@@ -88,7 +88,7 @@ def cookie2user(cookie_str):
         uid, expires, sha1 = L
         if int(expires) < time.time(): # 如果过了失效时间，则cookie失效了
             return None
-        user = yield from User.find(uid)  # 在数据库中查找用户信息
+        user = await User.find(uid)  # 在数据库中查找用户信息
         if user is None:  # 如果不存在用户名，则也出错了
             return None
         # 再用sha1处理得到的信息，与cookie里的sha1对象做对比
@@ -110,15 +110,14 @@ def cookie2user(cookie_str):
 # day14中定义
 # 页面：首页
 @get('/')
-@asyncio.coroutine
-def index(*, page='1'):
+async def index(*, page='1'):
     page_index = get_page_index(page)
-    num = yield from Blog.findNumber('count(id)')
+    num = await Blog.findNumber('count(id)')
     page = Page(num, page_index)
     if num == 0:
         blogs = []
     else:
-        blogs = yield from Blog.findAll(orderBy='created_at desc', limit=(page.offset, page.limit))
+        blogs = await Blog.findAll(orderBy='created_at desc', limit=(page.offset, page.limit))
     # 返回一个模板，指示使用何种模板，模板的内容
     # app.py的response_factory将会对handler.py的返回值进行分类处理
     return {
@@ -131,11 +130,10 @@ def index(*, page='1'):
 # day11定义
 # 页面：博客详情页
 @get('/blog/{id}')
-@asyncio.coroutine
-def get_blog(id, request):
-    blog = yield from Blog.find(id)  # 通过id从数据库中拉去博客信息
+async def get_blog(id, request):
+    blog = await Blog.find(id)  # 通过id从数据库中拉去博客信息
     # 从数据库拉取指定blog的全部评论，按时间降序排序，即最新的排在最前
-    comments = yield from Comment.findAll('blog_id=?', [id], orderBy='created_at desc')
+    comments = await Comment.findAll('blog_id=?', [id], orderBy='created_at desc')
     # 将每条评论都转化成html格式
     for c in comments:
         c.html_content = text2html(c.content)
@@ -250,8 +248,8 @@ _RE_EMAIL = re.compile(r'^[a-z0-9\.\-\_]+\@[a-z0-9\-\_]+(\.[a-z0-9\-\_]+){1,4}$'
 # [0-9a-f{40}表示匹配40个数字或a-f的字母
 _RE_SHA1 = re.compile(r'^[0-9a-f]{40}$')
 @post('/api/users')
-@asyncio.coroutine
-def api_register_user(*, email, name, passwd):  # 注册信息包括用户名邮箱与密码
+
+async def api_register_user(*, email, name, passwd):  # 注册信息包括用户名邮箱与密码
     # 验证输入的正确性
     # 如果没输入name
     if not name or not name.strip():  # s.strip(rm)函数表示删除s字符串中开头、结尾处，位于rm删除序列的字符
@@ -264,7 +262,7 @@ def api_register_user(*, email, name, passwd):  # 注册信息包括用户名邮
     if not passwd or not _RE_SHA1.match(passwd):
         raise APIValueError('passwd')
     # 在数据库里查看是否已存在该email
-    users = yield from User.findAll('email=?', [email])
+    users = await User.findAll('email=?', [email])
     # users的长度不为零即意味着数据库已存在同名email，抛出异常错误
     if len(users) > 0:
         raise APIError('register:failed', 'email', 'Email is already in use.')
@@ -279,7 +277,7 @@ def api_register_user(*, email, name, passwd):  # 注册信息包括用户名邮
     # 密码用的是sha1算法，而邮箱用的是md5算法
     # Gravatar是一项在全球范围内使用的头像服务，不过在中国好像被墙了
     user = User(id=uid, name=name.strip(), email=email, passwd=hashlib.sha1(sha1_passwd.encode('utf-8')).hexdigest(), image='http://www.gravatar.com/avatar/%s?d=mm&s=120' % hashlib.md5(email.encode('utf-8')).hexdigest())
-    yield from user.save()  # 将用户信息储存到数据库中
+    await user.save()  # 将用户信息储存到数据库中
 
     # make session cookie:
     r = web.Response()
@@ -301,15 +299,15 @@ def api_register_user(*, email, name, passwd):  # 注册信息包括用户名邮
 
 # API：用户登录
 @post('/api/authenticate')
-@asyncio.coroutine
-def authenticate(*, email, passwd):  # 通过邮箱与密码验证登陆
+
+async def authenticate(*, email, passwd):  # 通过邮箱与密码验证登陆
     # 验证是否输入了邮箱和密码
     if not email:
         raise APIValueError('email', 'Invalid email.')
     if not passwd:
         raise APIValueError('passwd', 'Invalid password.')
     # 在数据库中查找email，将以list的形式返回
-    users = yield from User.findAll('email=?', [email])
+    users = await User.findAll('email=?', [email])
     # 如果list长度为0，则说明数据库中没有相应的纪录，即用户不存在
     if len(users) == 0:
         raise APIValueError('email', 'Email not exist.')
@@ -350,16 +348,15 @@ def signout(request):
 # day11定义
 # API：实现获取单条博客信息的功能
 @get('/api/blogs/{id}')
-@asyncio.coroutine
-def api_get_blog(*, id):
-    blog = yield from Blog.find(id)
+
+async def api_get_blog(*, id):
+    blog = await Blog.find(id)
     return blog
 
 # day11定义
 # API：实现博客创建功能
 @post('/api/blogs')
-@asyncio.coroutine
-def api_create_blog(request, *, name, summary, content):
+async def api_create_blog(request, *, name, summary, content):
     check_admin(request) # 检查用户权限
     # 验证博客信息的合法性
     if not name or not name.strip():
@@ -370,45 +367,42 @@ def api_create_blog(request, *, name, summary, content):
         raise APIValueError('content', 'content cannot be empty.')
     # 创建博客对象
     blog = Blog(user_id=request.__user__.id, user_name=request.__user__.name, user_image=request.__user__.image, name=name.strip(), summary=summary.strip(), content=content.strip())
-    yield from blog.save()  # 储存博客到数据库中
+    await blog.save()  # 储存博客到数据库中
     return blog  # 返回博客信息
 
 
 # day12定义
 # API:获取博客
 @get('/api/blogs')
-@asyncio.coroutine
-def api_blogs(*, page='1'):
+async def api_blogs(*, page='1'):
     page_index = get_page_index(page)
-    num = yield from Blog.findNumber('count(id)') # num为博客总数
+    num = await Blog.findNumber('count(id)') # num为博客总数
     p = Page(num, page_index)  # 创建Page对象（Page对象在apis.py中定义）
     if num == 0:
         return dict(page=p, blogs=())  # 若博客数为0,返回字典,将被app.py的response中间件再处理
     # 博客总数不为0,则从数据库中抓取博客
     # limit强制select语句返回指定的记录数,前一个参数为偏移量,后一个参数为记录的最大数目
-    blogs = yield from Blog.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
+    blogs = await Blog.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
     return dict(page=p, blogs=blogs)  # 返回字典,以供response中间件处理
 
 # day14定义
 # API：获取评论
 @get('/api/comments')
-@asyncio.coroutine
-def api_comments(*, page='1'):
+async def api_comments(*, page='1'):
     page_index = get_page_index(page)
-    num = yield from Comment.findNumber('count(id)')  # num为评论总数
+    num = await Comment.findNumber('count(id)')  # num为评论总数
     p = Page(num, page_index)  # 创建Page对象，保存页面信息
     if num == 0:
         return dict(page=p, comments=())  # 若评论数为零，返回字典，将会被app.py的response中间件再处理
     # 博客总数不为0,则从数据库中抓取博客
     # limit强制select语句返回指定的记录数,前一个参数为偏移量,后一个参数为记录的最大数目
-    comments = yield from Comment.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
+    comments = await Comment.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
     return dict(page=p, comments=comments)
 
 # day14定义
 # API：创建评论
 @post('/api/blogs/{id}/comments')
-@asyncio.coroutine
-def api_create_comment(id, request, *, content):
+async def api_create_comment(id, request, *, content):
     user = request.__user__
     # 验证用户
     if user is None:
@@ -417,33 +411,31 @@ def api_create_comment(id, request, *, content):
     if not content or not content.strip():
         raise APIValueError('content')
     # 验证博客是否存在
-    blog = yield from Blog.find(id)
+    blog = await Blog.find(id)
     if blog is None:
         raise APIResourceNotFoundError('Blog')
     # 创建评论对象
     comment = Comment(blog_id=blog.id, user_id=user.id, user_name=user.name, user_image=user.image, content=content.strip())
-    yield from comment.save()  # 储存评论到数据库中
+    await comment.save()  # 储存评论到数据库中
     return comment  # 返回评论
 
 # day14定义
 # API：删除评论
 @post('/api/comments/{id}/delete')
-@asyncio.coroutine
-def api_delete_comments(id, request):
+async def api_delete_comments(id, request):
     check_admin(request)  #查看权限，是否是管理员
-    c = yield from Comment.find(id)  # 从数据库中拉去评论
+    c = await Comment.find(id)  # 从数据库中拉去评论
     if c is None:
         raise APIResourceNotFoundError('Comment')
-    yield from c.remove()  # 删除评论
+    await c.remove()  # 删除评论
     return dict(id=id)  # 返回被删除评论的id
 
 # day14定义
 # API:修改博客
 @post('/api/blogs/{id}')
-@asyncio.coroutine
-def api_update_blog(id, request, *, name, summary, content):
+async def api_update_blog(id, request, *, name, summary, content):
     check_admin(request)  # 检查用户权限
-    blog = yield from Blog.find(id)  # 从数据库中拉去修改前的博客
+    blog = await Blog.find(id)  # 从数据库中拉去修改前的博客
     # 检查博客的合法性
     if not name or not name.strip():
         raise APIValueError('name', 'name cannot be empty.')
@@ -454,15 +446,14 @@ def api_update_blog(id, request, *, name, summary, content):
     blog.name = name.strip()
     blog.summary = summary.strip()
     blog.content = content.strip()
-    yield from blog.update()  # 更新博客
+    await blog.update()  # 更新博客
     return blog  # 返回博客信息
 
 # day14定义
 # API:删除博客
 @post('/api/blogs/{id}/delete')
-@asyncio.coroutine
-def api_delete_blog(request, *, id):
+async def api_delete_blog(request, *, id):
     check_admin(request)
-    blog = yield from Blog.find(id)
-    yield from blog.remove()
+    blog = await Blog.find(id)
+    await blog.remove()
     return dict(id=id)
